@@ -11,9 +11,9 @@ An AI-powered codebase onboarding app.
 
 ```mermaid
 flowchart LR
-  Browser[Browser] -->|HTTP| ALB[ALB (AWS)\nPath-based routing]
-  ALB -->|/ (Next.js)| FE[ECS Fargate\nFrontend (Next.js)]
-  ALB -->|/repos, /qa, /healthz| BE[ECS Fargate\nBackend (FastAPI)]
+  Browser[Browser] -->|HTTP| ALB[ALB (AWS)<br/>Path-based routing]
+  ALB -->|/ (Next.js)| FE[ECS Fargate<br/>Frontend (Next.js)]
+  ALB -->|/repos, /qa, /healthz| BE[ECS Fargate<br/>Backend (FastAPI)]
 
   BE -->|SQLAlchemy| DB[(RDS Postgres)]
   BE -->|repo storage| EFS[(EFS /data/repos)]
@@ -21,8 +21,8 @@ flowchart LR
 
   subgraph Local
     FE2[Next.js (dev)] -->|HTTP| BE2[FastAPI (dev)]
-    BE2 --> PG[(Postgres + pgvector\nDocker)]
-    BE2 --> Disk[(Local disk\nCOAI_REPO_STORAGE_PATH)]
+    BE2 --> PG[(Postgres + pgvector<br/>Docker)]
+    BE2 --> Disk[(Local disk<br/>COAI_REPO_STORAGE_PATH)]
     BE2 --> OAI2[(OpenAI API)]
   end
 ```
