@@ -311,7 +311,7 @@ export default function Home() {
             <input
               type="file"
               accept=".zip"
-              className="flex-1 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm shadow-sm outline-none backdrop-blur transition file:mr-3 file:rounded-xl file:border-0 file:bg-white/70 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-800 hover:file:bg-white/90 dark:border-white/10 dark:bg-white/5 dark:file:bg-white/10 dark:file:text-zinc-100 dark:hover:file:bg-white/15"
+              className="flex-1 cursor-pointer rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm text-zinc-600 shadow-sm outline-none backdrop-blur transition file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-gradient-to-r file:from-violet-600 file:via-fuchsia-600 file:to-pink-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white file:shadow-sm file:transition hover:file:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400"
               onChange={(e) => setRepoZip(e.target.files?.[0] ?? null)}
               disabled={loading}
             />
@@ -358,6 +358,12 @@ export default function Home() {
               placeholder="e.g. Where is authentication handled?"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && canAsk && !loading && question.trim()) {
+                  e.preventDefault();
+                  void ask();
+                }
+              }}
               disabled={!canAsk || loading}
             />
             <div className="flex items-center gap-3">
