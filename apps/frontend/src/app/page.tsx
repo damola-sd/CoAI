@@ -25,8 +25,10 @@ type AgentEvent =
     }
   | { type: "run_error"; run_id: string; message?: string; agent?: string };
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+// In production we prefer same-origin requests (ALB routes /repos, /qa, etc. to the backend).
+// Using a hardcoded localhost default breaks deployed builds because NEXT_PUBLIC_* values are
+// inlined at build time.
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState("");
