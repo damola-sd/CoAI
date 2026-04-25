@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     repo_storage_path: str = ".data/repos"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
+    openai_embeddings_model: str = "text-embedding-3-small"
 
 
 settings = Settings()

@@ -77,8 +77,10 @@ export default function Home() {
     }
   }
 
-  async function ask() {
+  async function ask(qOverride?: string) {
     if (!repo) return;
+    const qText = (qOverride ?? question).trim();
+    if (!qText) return;
     setError(null);
     setAnswer(null);
     setChunks([]);
@@ -90,7 +92,7 @@ export default function Home() {
       const res = await fetch(`${API_BASE_URL}/qa/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo_id: repo.id, question: question.trim() }),
+        body: JSON.stringify({ repo_id: repo.id, question: qText }),
       });
       if (!res.ok) throw new Error(await res.text());
 
@@ -156,6 +158,14 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function askFollowup(f: string) {
+    if (!canAsk || loading) return;
+    const q = f.trim();
+    if (!q) return;
+    setQuestion(q);
+    await ask(q);
   }
 
   return (
@@ -235,7 +245,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <button
                 className="rounded-xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                onClick={ask}
+                onClick={() => ask()}
                 disabled={!canAsk || loading || question.trim().length === 0}
               >
                 Ask
@@ -290,7 +300,17 @@ export default function Home() {
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Follow-ups</h3>
               <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-900 dark:text-zinc-50">
                 {followups.map((f, idx) => (
-                  <li key={`${idx}:${f}`}>{f}</li>
+                  <li key={`${idx}:${f}`}>
+                    <button
+                      type="button"
+                      className="text-left underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500 disabled:opacity-50 dark:decoration-zinc-700 dark:hover:decoration-zinc-400"
+                      onClick={() => askFollowup(f)}
+                      disabled={!canAsk || loading}
+                      title="Ask this follow-up"
+                    >
+                      {f}
+                    </button>
+                  </li>
                 ))}
               </ul>
             </div>

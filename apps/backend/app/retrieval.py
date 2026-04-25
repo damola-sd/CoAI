@@ -69,15 +69,41 @@ async def retrieve_chunks(
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
-    embedder = get_embeddings_provider()
-    query_vec = await embedder.embed(question)
+    # Vector retrieval (with fallback to text search if embeddings fail).
+    try:
+        embedder = get_embeddings_provider()
+        query_vec = await embedder.embed(question)
 
-    # pgvector sqlalchemy adds distance helpers on the Vector column.
+        # pgvector sqlalchemy adds distance helpers on the Vector column.
+        stmt = (
+            select(Chunk)
+            .where(Chunk.repo_id == repo_id)
+            .where(Chunk.embedding.is_not(None))
+            .order_by(Chunk.embedding.cosine_distance(query_vec))  # type: ignore[attr-defined]
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        rows = list(result.scalars().all())
+        if rows:
+            return rows
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Fallback to local-friendly text search (same logic as fake embeddings path).
+    try:
+        result = await session.execute(_text_search_stmt(repo_id, question, limit))
+        rows = list(result.scalars().all())
+        if rows:
+            return rows
+    except Exception:  # noqa: BLE001
+        pass
+
+    q = question.strip()
     stmt = (
         select(Chunk)
         .where(Chunk.repo_id == repo_id)
-        .where(Chunk.embedding.is_not(None))
-        .order_by(Chunk.embedding.cosine_distance(query_vec))  # type: ignore[attr-defined]
+        .where(Chunk.content.ilike(f"%{q}%") if q else true())
+        .order_by(Chunk.created_at.desc())
         .limit(limit)
     )
     result = await session.execute(stmt)

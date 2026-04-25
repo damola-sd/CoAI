@@ -122,7 +122,13 @@ async def ingest_repo(session: AsyncSession, repo_id: uuid.UUID) -> None:
                 continue
 
             for spec in _chunk_text(rel, text):
-                emb = await embedder.embed(spec.content)
+                meta: dict = {}
+                try:
+                    emb = await embedder.embed(spec.content)
+                except Exception as e:  # noqa: BLE001
+                    # Fall back to text-search retrieval: store chunk without embeddings.
+                    emb = None
+                    meta = {"embedding_error": str(e)}
                 session.add(
                     Chunk(
                         repo_id=repo_id,
@@ -130,7 +136,7 @@ async def ingest_repo(session: AsyncSession, repo_id: uuid.UUID) -> None:
                         start_line=spec.start_line,
                         end_line=spec.end_line,
                         content=spec.content,
-                        meta={},
+                        meta=meta,
                         embedding=emb,
                     )
                 )

@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from abc import ABC, abstractmethod
 
+from openai import AsyncOpenAI
+
 from .config import settings
 
 
@@ -33,7 +35,24 @@ class FakeEmbeddingsProvider(EmbeddingsProvider):
         return out
 
 
+class OpenAIEmbeddingsProvider(EmbeddingsProvider):
+    def __init__(self, *, api_key: str, model: str) -> None:
+        self._client = AsyncOpenAI(api_key=api_key)
+        self._model = model
+
+    async def embed(self, text: str) -> list[float]:
+        resp = await self._client.embeddings.create(model=self._model, input=text)
+        return list(resp.data[0].embedding)
+
+
 def get_embeddings_provider() -> EmbeddingsProvider:
     if settings.embeddings_provider == "fake":
         return FakeEmbeddingsProvider(dim=settings.embeddings_dim)
+    if settings.embeddings_provider == "openai":
+        if not settings.openai_api_key:
+            raise ValueError("COAI_OPENAI_API_KEY is required when COAI_EMBEDDINGS_PROVIDER=openai")
+        return OpenAIEmbeddingsProvider(
+            api_key=settings.openai_api_key,
+            model=settings.openai_embeddings_model,
+        )
     raise ValueError(f"Unsupported embeddings_provider: {settings.embeddings_provider}")
