@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { useMemo, useRef, useState } from "react";
 
@@ -353,6 +354,7 @@ export default function Home() {
               <div className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
                   components={{
                     pre: ({ children, ...props }: { children?: React.ReactNode }) => (
                       <pre
@@ -370,9 +372,14 @@ export default function Home() {
                       className?: string;
                       children?: React.ReactNode;
                     }) => (
+                      // `rehype-highlight` typically sets `className="hljs language-..."` on fenced blocks.
                       <code
                         {...props}
-                        className={className ?? "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"}
+                        className={
+                          className?.includes("language-")
+                            ? `hljs ${className} block font-mono`
+                            : "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"
+                        }
                       >
                         {children}
                       </code>
@@ -391,6 +398,7 @@ export default function Home() {
               <div className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
                   components={{
                     pre: ({ children, ...props }: { children?: React.ReactNode }) => (
                       <pre
@@ -408,9 +416,14 @@ export default function Home() {
                       className?: string;
                       children?: React.ReactNode;
                     }) => (
+                      // `rehype-highlight` typically sets `className="hljs language-..."` on fenced blocks.
                       <code
                         {...props}
-                        className={className ?? "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"}
+                        className={
+                          className?.includes("language-")
+                            ? `hljs ${className} block font-mono`
+                            : "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"
+                        }
                       >
                         {children}
                       </code>
