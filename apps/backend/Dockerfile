@@ -1,0 +1,25 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+COPY apps/backend/pyproject.toml /app/pyproject.toml
+RUN uv sync --no-dev
+
+COPY apps/backend/app /app/app
+COPY apps/backend/alembic.ini /app/alembic.ini
+COPY apps/backend/alembic /app/alembic
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+

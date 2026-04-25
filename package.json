@@ -1,0 +1,22 @@
+{
+  "name": "codebase-onboarding-ai",
+  "private": true,
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "prettier -w .",
+    "typecheck": "turbo typecheck",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down -v"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.6"
+  }
+}
+
