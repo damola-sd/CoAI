@@ -46,6 +46,15 @@ export default function Home() {
 
   const canAsk = useMemo(() => repo?.status === "ready", [repo?.status]);
 
+  const repoStatusPillClass =
+    repo?.status === "ready"
+      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300"
+      : repo?.status === "ingesting"
+        ? "bg-sky-500/15 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+        : repo?.status === "failed"
+          ? "bg-rose-500/15 text-rose-700 ring-rose-500/20 dark:text-rose-300"
+          : "bg-amber-500/15 text-amber-800 ring-amber-500/20 dark:text-amber-200";
+
   async function refreshRepo(repoIdOverride?: string) {
     const id = repoIdOverride ?? repo?.id;
     if (!id) return;
@@ -65,7 +74,6 @@ export default function Home() {
     for (let i = 0; i < 120; i++) {
       if (pollTokenRef.current !== token) return; // superseded
       await refreshRepo(repoId);
-      const st = (repoId === repo?.id ? repo?.status : undefined) ?? undefined;
       // We can't rely on state immediately after setRepo, so fetch status directly too:
       try {
         const res = await fetch(`${API_BASE_URL}/repos/${repoId}`, { cache: "no-store" });
@@ -224,36 +232,73 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-zinc-50 px-6 py-10 font-sans text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <main className="w-full max-w-4xl space-y-8">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">AI Codebase Onboarding (Local)</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Ingest a git repo, then ask questions with grounded code context (no API keys required).
-          </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            API base URL: <span className="font-mono">{API_BASE_URL}</span>
-          </p>
+    <div className="relative flex flex-1 flex-col items-center overflow-hidden bg-gradient-to-br from-fuchsia-50 via-white to-sky-50 px-6 py-10 font-sans text-zinc-900 dark:from-zinc-950 dark:via-zinc-950 dark:to-slate-950 dark:text-zinc-50">
+      <div className="pointer-events-none absolute -top-24 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-fuchsia-400/30 via-violet-400/25 to-sky-400/30 blur-3xl dark:from-fuchsia-500/15 dark:via-violet-500/15 dark:to-sky-500/15" />
+      <div className="pointer-events-none absolute -bottom-32 right-[-120px] h-[520px] w-[520px] rounded-full bg-gradient-to-tr from-emerald-400/20 via-cyan-400/15 to-sky-400/20 blur-3xl dark:from-emerald-500/10 dark:via-cyan-500/10 dark:to-sky-500/10" />
+
+      <main className="relative w-full max-w-5xl space-y-8">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/50 px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-500" />
+              COAI
+              <span className="text-zinc-500 dark:text-zinc-400">• AI Codebase Onboarding</span>
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Ask better questions.
+              <span className="block bg-gradient-to-r from-fuchsia-600 via-violet-600 to-sky-600 bg-clip-text text-transparent dark:from-fuchsia-400 dark:via-violet-400 dark:to-sky-400">
+                Get grounded answers.
+              </span>
+            </h1>
+            <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-300">
+              Ingest a repository (Git URL or ZIP), then query it with retrieval + agentic reasoning.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden rounded-xl border border-white/40 bg-white/50 px-3 py-2 text-xs text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 sm:block">
+              API base: <span className="font-mono text-zinc-800 dark:text-zinc-100">{API_BASE_URL || "(same origin)"}</span>
+            </div>
+          </div>
         </header>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h2 className="text-lg font-medium">1) Ingest a repo</h2>
+        <section className="rounded-3xl border border-white/60 bg-white/60 p-5 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)] backdrop-blur dark:border-white/10 dark:bg-white/5 sm:p-6">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">1) Ingest a repo</h2>
+              <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                Create an index once, then ask questions instantly.
+              </p>
+            </div>
+
+            {repo ? (
+              <div className="mt-2 inline-flex items-center gap-2 self-start sm:mt-0 sm:self-auto">
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${repoStatusPillClass}`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                  {repo.status}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <input
-              className="flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-700"
+              className="flex-1 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm shadow-sm outline-none backdrop-blur transition focus:border-violet-300 focus:ring-4 focus:ring-violet-200/60 dark:border-white/10 dark:bg-white/5 dark:focus:border-violet-500/40 dark:focus:ring-violet-500/20"
               placeholder="https://github.com/org/repo"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
             />
             <button
-              className="rounded-xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+              className="rounded-2xl bg-gradient-to-r from-fuchsia-600 via-violet-600 to-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
               onClick={createRepo}
               disabled={loading || repoUrl.trim().length === 0}
             >
               Create + ingest
             </button>
             <button
-              className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+              className="rounded-2xl border border-white/60 bg-white/60 px-4 py-3 text-sm font-semibold text-zinc-800 shadow-sm backdrop-blur transition hover:bg-white/80 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10"
               onClick={() => refreshRepo()}
               disabled={loading || !repo}
               title="Refresh status"
@@ -266,12 +311,12 @@ export default function Home() {
             <input
               type="file"
               accept=".zip"
-              className="flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 dark:file:bg-zinc-900 dark:hover:file:bg-zinc-800"
+              className="flex-1 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm shadow-sm outline-none backdrop-blur transition file:mr-3 file:rounded-xl file:border-0 file:bg-white/70 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-800 hover:file:bg-white/90 dark:border-white/10 dark:bg-white/5 dark:file:bg-white/10 dark:file:text-zinc-100 dark:hover:file:bg-white/15"
               onChange={(e) => setRepoZip(e.target.files?.[0] ?? null)}
               disabled={loading}
             />
             <button
-              className="rounded-xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+              className="rounded-2xl bg-gradient-to-r from-emerald-600 via-cyan-600 to-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
               onClick={uploadRepoZip}
               disabled={loading || !repoZip}
               title="Upload a .zip of your repo"
@@ -281,7 +326,7 @@ export default function Home() {
           </div>
 
           {repo ? (
-            <div className="mt-4 rounded-xl bg-zinc-50 p-4 text-sm dark:bg-zinc-900">
+            <div className="mt-5 rounded-2xl border border-white/60 bg-white/60 p-4 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
               <div className="flex flex-col gap-1">
                 <div>
                   <span className="text-zinc-500 dark:text-zinc-400">Repo ID:</span>{" "}
@@ -289,10 +334,10 @@ export default function Home() {
                 </div>
                 <div>
                   <span className="text-zinc-500 dark:text-zinc-400">Status:</span>{" "}
-                  <span className="font-medium">{repo.status}</span>
+                  <span className="font-semibold">{repo.status}</span>
                 </div>
                 {repo.error ? (
-                  <div className="text-red-600 dark:text-red-400">
+                  <div className="text-rose-700 dark:text-rose-300">
                     <span className="text-zinc-500 dark:text-zinc-400">Error:</span> {repo.error}
                   </div>
                 ) : null}
@@ -305,11 +350,11 @@ export default function Home() {
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h2 className="text-lg font-medium">2) Ask a question</h2>
+        <section className="rounded-3xl border border-white/60 bg-white/60 p-5 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)] backdrop-blur dark:border-white/10 dark:bg-white/5 sm:p-6">
+          <h2 className="text-lg font-semibold">2) Ask a question</h2>
           <div className="mt-4 flex flex-col gap-3">
             <textarea
-              className="min-h-[90px] w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-zinc-400 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-700"
+              className="min-h-[96px] w-full rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm shadow-sm outline-none backdrop-blur transition focus:border-violet-300 focus:ring-4 focus:ring-violet-200/60 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:focus:border-violet-500/40 dark:focus:ring-violet-500/20"
               placeholder="e.g. Where is authentication handled?"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -317,7 +362,7 @@ export default function Home() {
             />
             <div className="flex items-center gap-3">
               <button
-                className="rounded-xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                className="rounded-2xl bg-gradient-to-r from-fuchsia-600 via-violet-600 to-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
                 onClick={() => ask()}
                 disabled={!canAsk || loading || question.trim().length === 0}
               >
