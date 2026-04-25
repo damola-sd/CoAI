@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     embeddings_provider: str = "fake"
     embeddings_dim: int = 1536
     repo_storage_path: str = ".data/repos"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4.1-mini"
 
 
 settings = Settings()

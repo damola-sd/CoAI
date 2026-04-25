@@ -24,6 +24,8 @@ services:
     environment:
       COAI_ENVIRONMENT: ${COAI_ENVIRONMENT:-local}
       COAI_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-codebase_onboarding}
+      COAI_OPENAI_API_KEY: ${COAI_OPENAI_API_KEY:-}
+      COAI_OPENAI_MODEL: ${COAI_OPENAI_MODEL:-gpt-4.1-mini}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:

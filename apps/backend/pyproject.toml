@@ -12,7 +12,11 @@ dependencies = [
   "alembic>=1.13",
   "pgvector>=0.3.6",
   "psycopg[binary]>=3.2",
+  "coai-orchestrator",
 ]
+
+[tool.uv.sources]
+coai-orchestrator = { path = "../../packages/orchestrator" }
 
 [project.optional-dependencies]
 dev = [

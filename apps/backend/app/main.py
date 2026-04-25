@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from coai_orchestrator import build_qa_graph
+
 from .config import settings
 from .db import get_db
 from .ingestion import ingest_repo_job
@@ -90,7 +92,17 @@ def create_app() -> FastAPI:
         ]
 
         # Local runnable default: extractive "answer" until an LLM is configured.
-        answer = _simple_local_answer(body.question, chunks)
+        if settings.openai_api_key:
+            graph = build_qa_graph(openai_api_key=settings.openai_api_key, model=settings.openai_model)
+            result = await graph.ainvoke(
+                {
+                    "question": body.question,
+                    "chunks": [c.model_dump() for c in chunks],
+                }
+            )
+            answer = str(result.get("answer") or "").strip() or "No answer returned."
+        else:
+            answer = _simple_local_answer(body.question, chunks)
         return QAResponse(
             answer=answer,
             chunks=chunks,

@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-WORKDIR /app
+WORKDIR /repo/apps/backend
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -12,12 +12,13 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir uv
 
-COPY apps/backend/pyproject.toml /app/pyproject.toml
+COPY apps/backend/pyproject.toml /repo/apps/backend/pyproject.toml
+COPY packages/orchestrator /repo/packages/orchestrator
 RUN uv sync --no-dev
 
-COPY apps/backend/app /app/app
-COPY apps/backend/alembic.ini /app/alembic.ini
-COPY apps/backend/alembic /app/alembic
+COPY apps/backend/app /repo/apps/backend/app
+COPY apps/backend/alembic.ini /repo/apps/backend/alembic.ini
+COPY apps/backend/alembic /repo/apps/backend/alembic
 
 EXPOSE 8000
 
