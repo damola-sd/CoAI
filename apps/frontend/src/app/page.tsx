@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useMemo, useRef, useState } from "react";
 
 type RepoResponse = {
   id: string;
@@ -27,6 +29,7 @@ const API_BASE_URL =
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState("");
+  const [repoZip, setRepoZip] = useState<File | null>(null);
   const [repo, setRepo] = useState<RepoResponse | null>(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
@@ -36,8 +39,44 @@ export default function Home() {
   const [activity, setActivity] = useState<Array<{ ts: number; text: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollTokenRef = useRef(0);
 
   const canAsk = useMemo(() => repo?.status === "ready", [repo?.status]);
+
+  async function refreshRepo(repoIdOverride?: string) {
+    const id = repoIdOverride ?? repo?.id;
+    if (!id) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/repos/${id}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as RepoResponse;
+      setRepo(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function pollRepoUntilReady(repoId: string) {
+    const token = ++pollTokenRef.current;
+    for (let i = 0; i < 120; i++) {
+      if (pollTokenRef.current !== token) return; // superseded
+      await refreshRepo(repoId);
+      const st = (repoId === repo?.id ? repo?.status : undefined) ?? undefined;
+      // We can't rely on state immediately after setRepo, so fetch status directly too:
+      try {
+        const res = await fetch(`${API_BASE_URL}/repos/${repoId}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as RepoResponse;
+          setRepo(data);
+          if (data.status === "ready" || data.status === "failed") return;
+        }
+      } catch {
+        // ignore transient errors during polling
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
 
   async function createRepo() {
     setError(null);
@@ -57,6 +96,7 @@ export default function Home() {
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as RepoResponse;
       setRepo(data);
+      void pollRepoUntilReady(data.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -64,16 +104,28 @@ export default function Home() {
     }
   }
 
-  async function refreshRepo() {
-    if (!repo) return;
+  async function uploadRepoZip() {
+    if (!repoZip) return;
     setError(null);
+    setAnswer(null);
+    setChunks([]);
+    setFollowups([]);
+    setPlan(null);
+    setActivity([]);
+    setRepo(null);
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/repos/${repo.id}`, { cache: "no-store" });
+      const form = new FormData();
+      form.append("file", repoZip, repoZip.name);
+      const res = await fetch(`${API_BASE_URL}/repos/upload`, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as RepoResponse;
       setRepo(data);
+      void pollRepoUntilReady(data.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -199,11 +251,29 @@ export default function Home() {
             </button>
             <button
               className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
-              onClick={refreshRepo}
+              onClick={() => refreshRepo()}
               disabled={loading || !repo}
               title="Refresh status"
             >
               Refresh
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              type="file"
+              accept=".zip"
+              className="flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 dark:file:bg-zinc-900 dark:hover:file:bg-zinc-800"
+              onChange={(e) => setRepoZip(e.target.files?.[0] ?? null)}
+              disabled={loading}
+            />
+            <button
+              className="rounded-xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+              onClick={uploadRepoZip}
+              disabled={loading || !repoZip}
+              title="Upload a .zip of your repo"
+            >
+              Upload + ingest (.zip)
             </button>
           </div>
 
@@ -280,18 +350,76 @@ export default function Home() {
           {plan ? (
             <div className="mt-5 space-y-3">
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Plan</h3>
-              <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
-                {plan}
-              </pre>
+              <div className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    pre: ({ children, ...props }: { children?: React.ReactNode }) => (
+                      <pre
+                        {...props}
+                        className="overflow-auto rounded-lg bg-zinc-100 p-3 text-xs dark:bg-zinc-950"
+                      >
+                        {children}
+                      </pre>
+                    ),
+                    code: ({
+                      className,
+                      children,
+                      ...props
+                    }: {
+                      className?: string;
+                      children?: React.ReactNode;
+                    }) => (
+                      <code
+                        {...props}
+                        className={className ?? "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"}
+                      >
+                        {children}
+                      </code>
+                    ),
+                  }}
+                >
+                  {plan}
+                </ReactMarkdown>
+              </div>
             </div>
           ) : null}
 
           {answer ? (
             <div className="mt-5 space-y-3">
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Answer</h3>
-              <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
-                {answer}
-              </pre>
+              <div className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    pre: ({ children, ...props }: { children?: React.ReactNode }) => (
+                      <pre
+                        {...props}
+                        className="overflow-auto rounded-lg bg-zinc-100 p-3 text-xs dark:bg-zinc-950"
+                      >
+                        {children}
+                      </pre>
+                    ),
+                    code: ({
+                      className,
+                      children,
+                      ...props
+                    }: {
+                      className?: string;
+                      children?: React.ReactNode;
+                    }) => (
+                      <code
+                        {...props}
+                        className={className ?? "rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-950"}
+                      >
+                        {children}
+                      </code>
+                    ),
+                  }}
+                >
+                  {answer}
+                </ReactMarkdown>
+              </div>
             </div>
           ) : null}
 

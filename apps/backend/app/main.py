@@ -2,8 +2,9 @@ import uuid
 
 import asyncio
 import json
+from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -13,7 +14,7 @@ from coai_orchestrator import build_multi_agent_qa_graph, build_qa_graph
 
 from .config import settings
 from .db import get_db
-from .ingestion import ingest_repo_job
+from .ingestion import ingest_local_zip_job, ingest_repo_job
 from .models import Repo, RepoStatus
 from .retrieval import retrieve_chunks
 from .schemas import QAChunk, QARequest, QAResponse, RepoCreateRequest, RepoResponse
@@ -72,6 +73,36 @@ def create_app() -> FastAPI:
         await session.refresh(repo)
 
         background.add_task(ingest_repo_job, repo.id)
+        return RepoResponse.model_validate(repo, from_attributes=True)
+
+    @app.post("/repos/upload", response_model=RepoResponse)
+    async def upload_repo_zip(
+        background: BackgroundTasks,
+        file: UploadFile = File(...),
+        session: AsyncSession = Depends(get_db),
+    ) -> RepoResponse:
+        filename = (file.filename or "repo.zip").strip()
+        if not filename.lower().endswith(".zip"):
+            raise HTTPException(status_code=400, detail="Only .zip uploads are supported")
+
+        repo = Repo(url=f"local:{filename}", status=RepoStatus.pending)
+        session.add(repo)
+        await session.commit()
+        await session.refresh(repo)
+
+        tmp_root = Path(settings.repo_storage_path) / "_uploads"
+        tmp_root.mkdir(parents=True, exist_ok=True)
+        zip_path = tmp_root / f"{repo.id}.zip"
+
+        # Save upload to disk (streaming)
+        with zip_path.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+
+        background.add_task(ingest_local_zip_job, repo.id, str(zip_path))
         return RepoResponse.model_validate(repo, from_attributes=True)
 
     @app.get("/repos/{repo_id}", response_model=RepoResponse)
