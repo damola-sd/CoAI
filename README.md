@@ -7,24 +7,78 @@ An AI-powered codebase onboarding app.
 - **Storage**: Postgres (optionally `pgvector`) + repo storage on disk (local) / EFS (AWS)
 - **LLM**: OpenAI (chat + embeddings) with graceful fallback (text search / local answer)
 
-## Architecture (local + AWS)
+## Architecture
 
 ```mermaid
-flowchart LR
-  Browser["Browser"] -->|HTTP| ALB["ALB (AWS)<br/>Path-based routing"]
-  ALB -->|/ (Next.js)| FE["ECS Fargate<br/>Frontend (Next.js)"]
-  ALB -->|/repos, /qa, /healthz| BE["ECS Fargate<br/>Backend (FastAPI)"]
+flowchart TB
+    classDef frontend  fill:#1a1a2e,stroke:#4a4aff,stroke-width:2px,color:#fff
+    classDef backend   fill:#026e3f,stroke:#333,stroke-width:2px,color:#fff
+    classDef agent     fill:#8e44ad,stroke:#333,stroke-width:2px,color:#fff
+    classDef database  fill:#2980b9,stroke:#333,stroke-width:2px,color:#fff
+    classDef storage   fill:#16a085,stroke:#333,stroke-width:2px,color:#fff
+    classDef external  fill:#f39c12,stroke:#333,stroke-width:2px,color:#fff
+    classDef infra     fill:#c0392b,stroke:#333,stroke-width:2px,color:#fff
 
-  BE -->|SQLAlchemy| DB[(RDS Postgres)]
-  BE -->|repo storage| EFS[(EFS /data/repos)]
-  BE -->|chat + embeddings| OAI[(OpenAI API)]
+    subgraph Client_Tier[Client Tier]
+        U((Developer))
+        FE[Next.js Frontend<br>ECS Fargate]:::frontend
+    end
 
-  subgraph Local
-    FE2["Next.js (dev)"] -->|HTTP| BE2["FastAPI (dev)"]
-    BE2 --> PG["Postgres + pgvector<br/>Docker"]
-    BE2 --> Disk["Local disk<br/>COAI_REPO_STORAGE_PATH"]
-    BE2 --> OAI2[(OpenAI API)]
-  end
+    subgraph Infra_Tier[AWS Networking]
+        ALB[Application Load Balancer<br>Path-based routing]:::infra
+    end
+
+    subgraph Backend_Tier[Backend Tier - FastAPI on ECS Fargate]
+        API[FastAPI Router<br>/repos  /qa  /healthz]:::backend
+        SSE[SSE Streamer<br>Server-Sent Events]:::backend
+        ING[Ingestion Worker<br>Git clone / ZIP extract]:::backend
+
+        API --> SSE
+        API --> ING
+    end
+
+    subgraph AI_Pipeline[AI Multi-Agent Orchestration - LangGraph]
+        Orch[Orchestrator]:::agent
+        A1[1. Planner Agent<br>Break down question]:::agent
+        A2[2. Retriever Agent<br>RAG chunk lookup]:::agent
+        A3[3. Explainer Agent<br>Draft answer]:::agent
+        A4[4. Critic Agent<br>Review and refine]:::agent
+        A5[5. Follow-ups Agent<br>Suggest next questions]:::agent
+
+        Orch --> A1
+        A1 --> A2
+        A2 --> A3
+        A3 --> A4
+        A4 --> A5
+        A5 --> Orch
+    end
+
+    subgraph Data_Tier[Data & Storage]
+        DB[(RDS PostgreSQL<br>Repos + Chunks + Embeddings)]:::database
+        EFS[(EFS Volume<br>/data/repos)]:::storage
+    end
+
+    subgraph LLM_Tier[External AI]
+        EMB[OpenAI Embeddings<br>text-embedding-3-small]:::external
+        LLM[OpenAI Chat<br>gpt-4.1-mini]:::external
+    end
+
+    U -->|Opens app| FE
+    FE -->|All requests| ALB
+    ALB -->|/ frontend| FE
+    ALB -->|/repos /qa /healthz| API
+
+    API <-->|Read / Write| DB
+    ING -->|Clone or extract| EFS
+    ING -->|Embed chunks| EMB
+    ING -->|Store vectors| DB
+
+    API -->|Triggers| Orch
+    Orch -.->|Yields events| SSE
+    SSE -.->|SSE stream| FE
+
+    A2 <-->|Vector search| DB
+    A1 & A3 & A4 & A5 <-->|Prompts and completions| LLM
 ```
 
 ## Repo layout
