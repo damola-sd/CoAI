@@ -1,11 +1,15 @@
 import uuid
 
+import asyncio
+import json
+
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from coai_orchestrator import build_qa_graph
+from coai_orchestrator import build_multi_agent_qa_graph, build_qa_graph
 
 from .config import settings
 from .db import get_db
@@ -107,6 +111,66 @@ def create_app() -> FastAPI:
             answer=answer,
             chunks=chunks,
         )
+
+    @app.post("/qa/stream")
+    async def qa_stream(body: QARequest, session: AsyncSession = Depends(get_db)) -> StreamingResponse:
+        if not settings.openai_api_key:
+            raise HTTPException(status_code=400, detail="COAI_OPENAI_API_KEY is required for /qa/stream")
+
+        repo = await session.scalar(select(Repo).where(Repo.id == body.repo_id))
+        if repo is None:
+            raise HTTPException(status_code=404, detail="repo not found")
+        if repo.status != RepoStatus.ready:
+            raise HTTPException(status_code=409, detail=f"repo not ready (status={repo.status})")
+
+        run_id = str(uuid.uuid4())
+        q: asyncio.Queue[dict] = asyncio.Queue()
+
+        def emit(evt: dict) -> None:
+            q.put_nowait(evt)
+
+        async def retrieve(question: str) -> list[dict]:
+            raw_chunks = await retrieve_chunks(session, repo.id, question=question, limit=8)
+            return [
+                {
+                    "path": c.path,
+                    "start_line": c.start_line,
+                    "end_line": c.end_line,
+                    "content": c.content,
+                }
+                for c in raw_chunks
+            ]
+
+        graph = build_multi_agent_qa_graph(
+            openai_api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            retrieve=retrieve,
+            emit=emit,
+        )
+
+        async def runner() -> None:
+            emit({"type": "run_started", "run_id": run_id})
+            try:
+                await graph.ainvoke({"run_id": run_id, "question": body.question})
+            except Exception as e:  # noqa: BLE001
+                emit({"type": "run_error", "run_id": run_id, "message": f"run_failed: {e}"})
+            finally:
+                emit({"type": "__end__", "run_id": run_id})
+
+        task = asyncio.create_task(runner())
+
+        async def event_iter():
+            try:
+                while True:
+                    evt = await q.get()
+                    if evt.get("type") == "__end__":
+                        break
+                    data = json.dumps(evt, ensure_ascii=False)
+                    yield f"data: {data}\n\n"
+            finally:
+                task.cancel()
+
+        return StreamingResponse(event_iter(), media_type="text/event-stream")
 
     return app
 

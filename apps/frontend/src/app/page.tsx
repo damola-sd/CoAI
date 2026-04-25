@@ -9,6 +9,19 @@ type RepoResponse = {
   error?: string | null;
 };
 
+type QAChunk = { path: string; start_line: number; end_line: number; content: string };
+type AgentEvent =
+  | { type: "run_started"; run_id: string }
+  | { type: "agent_started"; run_id: string; agent: string }
+  | { type: "agent_progress"; run_id: string; agent?: string; message?: string }
+  | { type: "agent_finished"; run_id: string; agent: string }
+  | {
+      type: "final_result";
+      run_id: string;
+      data: { answer: string; chunks: QAChunk[]; followups?: string[]; plan?: string };
+    }
+  | { type: "run_error"; run_id: string; message?: string; agent?: string };
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
@@ -17,9 +30,10 @@ export default function Home() {
   const [repo, setRepo] = useState<RepoResponse | null>(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
-  const [chunks, setChunks] = useState<
-    Array<{ path: string; start_line: number; end_line: number; content: string }>
-  >([]);
+  const [chunks, setChunks] = useState<QAChunk[]>([]);
+  const [followups, setFollowups] = useState<string[]>([]);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [activity, setActivity] = useState<Array<{ ts: number; text: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +43,9 @@ export default function Home() {
     setError(null);
     setAnswer(null);
     setChunks([]);
+    setFollowups([]);
+    setPlan(null);
+    setActivity([]);
     setRepo(null);
     setLoading(true);
     try {
@@ -65,20 +82,75 @@ export default function Home() {
     setError(null);
     setAnswer(null);
     setChunks([]);
+    setFollowups([]);
+    setPlan(null);
+    setActivity([]);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/qa`, {
+      const res = await fetch(`${API_BASE_URL}/qa/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ repo_id: repo.id, question: question.trim() }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as {
-        answer: string;
-        chunks: Array<{ path: string; start_line: number; end_line: number; content: string }>;
-      };
-      setAnswer(data.answer);
-      setChunks(data.chunks);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body (stream not supported).");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames separated by blank line
+        while (true) {
+          const sep = buffer.indexOf("\n\n");
+          if (sep === -1) break;
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+
+          const dataLine = frame
+            .split("\n")
+            .map((l) => l.trimEnd())
+            .find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          const jsonStr = dataLine.replace(/^data:\s?/, "");
+
+          let evt: AgentEvent | null = null;
+          try {
+            evt = JSON.parse(jsonStr) as AgentEvent;
+          } catch {
+            continue;
+          }
+
+          const now = Date.now();
+          if (evt.type === "run_started") {
+            setActivity((a) => [...a, { ts: now, text: "Run started" }]);
+          } else if (evt.type === "agent_started") {
+            setActivity((a) => [...a, { ts: now, text: `${evt.agent} started` }]);
+          } else if (evt.type === "agent_progress") {
+            setActivity((a) => [
+              ...a,
+              { ts: now, text: `${evt.agent ?? "agent"}: ${evt.message ?? "working..."}` },
+            ]);
+          } else if (evt.type === "agent_finished") {
+            setActivity((a) => [...a, { ts: now, text: `${evt.agent} finished` }]);
+          } else if (evt.type === "run_error") {
+            setActivity((a) => [
+              ...a,
+              { ts: now, text: `error${evt.agent ? ` (${evt.agent})` : ""}: ${evt.message ?? ""}` },
+            ]);
+          } else if (evt.type === "final_result") {
+            setAnswer(evt.data.answer);
+            setChunks(evt.data.chunks);
+            setFollowups(evt.data.followups ?? []);
+            setPlan(evt.data.plan ?? null);
+            setActivity((a) => [...a, { ts: now, text: "Final result received" }]);
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -178,12 +250,49 @@ export default function Home() {
             </div>
           </div>
 
+          {activity.length ? (
+            <div className="mt-5 space-y-3">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Agent activity
+              </h3>
+              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+                <div className="max-h-48 space-y-1 overflow-auto font-mono text-xs text-zinc-700 dark:text-zinc-200">
+                  {activity.map((a, idx) => (
+                    <div key={`${a.ts}:${idx}`} className="whitespace-pre-wrap">
+                      {a.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {plan ? (
+            <div className="mt-5 space-y-3">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Plan</h3>
+              <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
+                {plan}
+              </pre>
+            </div>
+          ) : null}
+
           {answer ? (
             <div className="mt-5 space-y-3">
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Answer</h3>
               <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
                 {answer}
               </pre>
+            </div>
+          ) : null}
+
+          {followups.length ? (
+            <div className="mt-5 space-y-3">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Follow-ups</h3>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-900 dark:text-zinc-50">
+                {followups.map((f, idx) => (
+                  <li key={`${idx}:${f}`}>{f}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
